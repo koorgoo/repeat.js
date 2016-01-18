@@ -1,0 +1,30 @@
+<html>
+  <head>
+  </head>
+  <body>
+    <h1>You must see 5 records on page and in console.</h1>
+    <code id="log"></code>
+
+    <script src="../../dist/repeat.js"></script>
+    <script>
+      var log = document.querySelector('#log');
+      var loop = new Repeat({
+        action: function() {
+          var time = new Date();
+          log.innerHTML += '' + time + '<br/>';
+          return time;
+        },
+        post: function(time) {
+          console.log(time);
+        },
+        timeout: function() {
+          return 1000;
+        }
+      });
+
+      loop.run();
+      setTimeout(function() {
+        loop.stop();
+      }, 5000);
+    </script>
+</html>

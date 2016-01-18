@@ -1,0 +1,11 @@
+{
+  "name": "repeat-action",
+  "version": "0.0.1",
+  "authors": [
+    "Dima Kurguzov <koorgoo@gmail.com>"
+  ],
+  "description": "",
+  "main": "dist/repeat.js",
+  "license": "MIT",
+  "homepage": ""
+}
