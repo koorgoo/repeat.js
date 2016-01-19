@@ -27,14 +27,17 @@ describe('Scheduler', () => {
     var err = null;
     var s = new Scheduler({
       action: () => {
-        return q.Promise((resolve) => {
-          setTimeout(resolve.bind(null, 'value'), 10);
+        return q.Promise(resolve => {
+          setTimeout(() => resolve('value'), 10);
         });
       },
-      posts: [() => { err = 'Post is called.'; }],
-      timeout: 100
+      posts: [() => err = 'Post is called.'],
+      timeout: () => 100
     });
-    s.action.addPost(() => done(err), true); // Use interval api to test.
+    s.__onActionInTest = action => {
+      // Special post that will be called even after stop.
+      action.addPost(() => done(err), true);
+    };
     s.run();
     s.stop();
   });
@@ -44,7 +47,7 @@ describe('Scheduler', () => {
     var s = new Scheduler({
       action: () => 'value',
       posts: [],
-      timeout: (value) => {
+      timeout: value => {
         if (value === 'value') {
           err = null;
         }
@@ -65,7 +68,7 @@ describe('Scheduler', () => {
         return q.resolve('value')
       },
       posts: [],
-      timeout: (value) => {
+      timeout: value => {
         if (value === 'value') {
           err = null;
         }
@@ -78,6 +81,7 @@ describe('Scheduler', () => {
       done(err);
     }, 5);
   });
+
 });
 
 
@@ -87,16 +91,9 @@ describe('Action', () => {
       new Action(done).call();
     });
 
-    it('does not call action function if permit function forbids', done => {
-      var err = null;
-      var action = new Action(() => {err = 'Action is called.'}, () => false);
-      action.call();
-      done(err);
-    });
-
     it('calls post', () => {
       var action = new Action(() => 'value');
-      action.addPost((value) => {
+      action.addPost(value => {
         assert.equal('value', value);
       });
       action.call();
@@ -104,7 +101,7 @@ describe('Action', () => {
 
     it('calls post for resolved promise', done => {
       var action = new Action(() => q.resolve('value'));
-      action.addPost((value) => {
+      action.addPost(value => {
         assert.equal('value', value);
         done();
       });
@@ -113,11 +110,19 @@ describe('Action', () => {
 
     it('calls post for rejected promise', done => {
       var action = new Action(() => q.reject('reason'));
-      action.addPost((reason) => {
+      action.addPost(reason => {
         assert.equal('reason', reason);
         done();
       }, true);
       action.call();
+    });
+
+    it('calls post when error is thrown', (done) => {
+      var err = 'Error is not caught';
+      var action = new Action(() => { throw new Error(err) });
+      action.addPost(() => err = null);
+      action.call();
+      done(err);
     });
   });
 });
@@ -138,5 +143,31 @@ describe('Permission', () => {
     granted.deny();
     assert.ok(!granted.granted());
     assert.ok(!notGranted.granted());
+  });
+
+  it('wraps functions with granted()', () => {
+    var called = false;
+    var call = () => called = true;
+
+    var granted = new Permission(() => true);
+    granted.wrap(call)();
+    assert.ok(called === true);
+
+    called = false;
+    granted.deny();
+    granted.wrap(call)();
+    assert.ok(called === false);
+
+    called = false;
+    var notGranted = new Permission(() => false);
+    notGranted.wrap(call)();
+    assert.ok(called === false);
+  });
+
+  it('wraps function and pass arguments', () => {
+    var granted = new Permission(() => true);
+    granted.wrap((...args) => {
+      assert.deepEqual(['one', 'two'], args);
+    })('one', 'two');
   });
 });
