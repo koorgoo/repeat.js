@@ -23,7 +23,7 @@ describe('Repeat', () => {
 
 
 describe('Scheduler', () => {
-  it('does not call posts after scheduler is stopped', (done) => {
+  it('does not call posts after scheduler is stopped', done => {
     var err = null;
     var s = new Scheduler({
       action: () => {
@@ -38,16 +38,56 @@ describe('Scheduler', () => {
     s.run();
     s.stop();
   });
+
+  it('passes action value to timeout function', done => {
+    var err = 'timeout() has not received value as argument';
+    var s = new Scheduler({
+      action: () => 'value',
+      posts: [],
+      timeout: (value) => {
+        if (value === 'value') {
+          err = null;
+        }
+        return 10;
+      }
+    });
+    s.run();
+    setTimeout(() => {
+      s.stop();
+      done(err);
+    }, 5);
+  });
+
+  it('passes value of fulfilled action promise to timeout function', done => {
+    var err = 'timeout() has not received value as argument';
+    var s = new Scheduler({
+      action: () => {
+        return q.resolve('value')
+      },
+      posts: [],
+      timeout: (value) => {
+        if (value === 'value') {
+          err = null;
+        }
+        return 10;
+      }
+    });
+    s.run();
+    setTimeout(() => {
+      s.stop();
+      done(err);
+    }, 5);
+  });
 });
 
 
 describe('Action', () => {
   describe('call()', () => {
-    it('calls action function', (done) => {
+    it('calls action function', done => {
       new Action(done).call();
     });
 
-    it('does not call action function if permit function forbids', (done) => {
+    it('does not call action function if permit function forbids', done => {
       var err = null;
       var action = new Action(() => {err = 'Action is called.'}, () => false);
       action.call();
@@ -62,7 +102,7 @@ describe('Action', () => {
       action.call();
     });
 
-    it('calls post for resolved promise', (done) => {
+    it('calls post for resolved promise', done => {
       var action = new Action(() => q.resolve('value'));
       action.addPost((value) => {
         assert.equal('value', value);
@@ -71,7 +111,7 @@ describe('Action', () => {
       action.call();
     });
 
-    it('calls post for rejected promise', (done) => {
+    it('calls post for rejected promise', done => {
       var action = new Action(() => q.reject('reason'));
       action.addPost((reason) => {
         assert.equal('reason', reason);

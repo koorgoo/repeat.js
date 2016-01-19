@@ -1,11 +1,14 @@
 {
   "name": "repeat-action",
-  "version": "0.0.1",
+  "version": "0.0.2",
+  "description": "Smarter setInterval.",
+  "main": "dist/repeat.js",
   "authors": [
     "Dima Kurguzov <koorgoo@gmail.com>"
   ],
-  "description": "",
-  "main": "dist/repeat.js",
   "license": "MIT",
-  "homepage": ""
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/koorgoo/repeat.js"
+  }
 }
