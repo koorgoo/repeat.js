@@ -2,6 +2,7 @@ var assert = require('assert');
 var q = require('q');
 var exportAll = require('../build/repeat.js').exportAll;
 var {Repeat, Scheduler, Action, Permission} = exportAll();
+var {toFunctionsArray, callSafely} = exportAll();
 
 describe('Repeat', () => {
   it('throws error if action is not function', () => {
@@ -31,12 +32,14 @@ describe('Scheduler', () => {
           setTimeout(() => resolve('value'), 10);
         });
       },
-      posts: [() => err = 'Post is called.'],
+      done: [() => err = 'Post is called.'],
+      fail: [],
+      always: [],
       timeout: () => 100
     });
     s.__onActionInTest = action => {
       // Special post that will be called even after stop.
-      action.addPost(() => done(err), true);
+      action.always.push(() => done(err));
     };
     s.run();
     s.stop();
@@ -46,7 +49,9 @@ describe('Scheduler', () => {
     var err = 'timeout() has not received value as argument';
     var s = new Scheduler({
       action: () => 'value',
-      posts: [],
+      done: [],
+      fail: [],
+      always: [],
       timeout: value => {
         if (value === 'value') {
           err = null;
@@ -67,7 +72,9 @@ describe('Scheduler', () => {
       action: () => {
         return q.resolve('value')
       },
-      posts: [],
+      done: [],
+      fail: [],
+      always: [],
       timeout: value => {
         if (value === 'value') {
           err = null;
@@ -81,48 +88,68 @@ describe('Scheduler', () => {
       done(err);
     }, 5);
   });
-
 });
 
 
 describe('Action', () => {
   describe('call()', () => {
     it('calls action function', done => {
-      new Action(done).call();
+      new Action(done, [], [], []).call();
     });
 
-    it('calls post', () => {
-      var action = new Action(() => 'value');
-      action.addPost(value => {
-        assert.equal('value', value);
-      });
+    it('calls callbacks with action result', () => {
+      var log = [];
+      var action = new Action(
+        () => 'value',
+        [value => { if (value === 'value') log.push('done') }],
+        [value => { if (value === 'value') log.push('fail') }],
+        [value => { if (value === 'value') log.push('always') }]
+      );
       action.call();
+      assert.deepEqual(['done', 'always'], log);
     });
 
-    it('calls post for resolved promise', done => {
-      var action = new Action(() => q.resolve('value'));
-      action.addPost(value => {
-        assert.equal('value', value);
+    it('calls callbacks with action error', () => {
+      var log = [];
+      var thrown = new Error();
+      var action = new Action(
+        () => {throw thrown},
+        [(v, err) => { if (err === thrown) log.push('done') }],
+        [(v, err) => { if (err === thrown) log.push('fail') }],
+        [(v, err) => { if (err === thrown) log.push('always') }]
+      );
+      action.call();
+      assert.deepEqual(['fail', 'always'], log);
+    });
+
+    it('calls callbacks for fulfilled promise', done => {
+      var log = [];
+      var action = new Action(
+        () => q.resolve('value'),
+        [value => { if (value === 'value') log.push('done') }],
+        [value => { if (value === 'value') log.push('fail') }],
+        [value => { if (value === 'value') log.push('always') }]
+      );
+      action.always.push(() => {
+        assert.deepEqual(['done', 'always'], log);
         done();
       });
       action.call();
     });
 
-    it('calls post for rejected promise', done => {
-      var action = new Action(() => q.reject('reason'));
-      action.addPost(reason => {
-        assert.equal('reason', reason);
+    it('calls callbacks for rejected promise', done => {
+      var log = [];
+      var action = new Action(
+        () => q.reject('reason'),
+        [reason => { if (reason === 'reason') log.push('done') }],
+        [reason => { if (reason === 'reason') log.push('fail') }],
+        [reason => { if (reason === 'reason') log.push('always') }]
+      );
+      action.always.push(() => {
+        assert.deepEqual(['fail', 'always'], log);
         done();
-      }, true);
+      });
       action.call();
-    });
-
-    it('calls post when error is thrown', (done) => {
-      var err = 'Error is not caught';
-      var action = new Action(() => { throw new Error(err) });
-      action.addPost(() => err = null);
-      action.call();
-      done(err);
     });
   });
 });
@@ -169,5 +196,60 @@ describe('Permission', () => {
     granted.wrap((...args) => {
       assert.deepEqual(['one', 'two'], args);
     })('one', 'two');
+  });
+});
+
+
+describe('toFunctionsArray()', () => {
+  it('throws error if not function is passed', () => {
+    assert.throws(() => toFunctionsArray('s'), Error);
+    assert.throws(() => toFunctionsArray(123), Error);
+    assert.throws(() => toFunctionsArray({}), Error);
+  });
+
+  it('throws error if not functions array is passed', () => {
+    assert.throws(() => toFunctionsArray(['s']), Error);
+    assert.throws(() => toFunctionsArray([123]), Error);
+    assert.throws(() => toFunctionsArray([{}]), Error);
+  });
+
+  it('returns empty array for null & undefined', () => {
+    assert.deepEqual([], toFunctionsArray(null));
+    assert.deepEqual([], toFunctionsArray(undefined));
+  });
+
+  it('returns array with passed function', () => {
+    var one = () => {};
+    assert.deepEqual([one], toFunctionsArray(one));
+  });
+
+  it('returns array with passed functions', () => {
+    var one = () => {};
+    var two = () => {};
+    assert.deepEqual([one, two], toFunctionsArray([one, two]));
+  });
+});
+
+describe('callSafely()', () => {
+  it('passes arguments to function', () => {
+    callSafely((...args) => {
+      assert.deepEqual(['one', 'two'], args);
+    }, 'one', 'two');
+  });
+
+  it('catches error thrown by function', () => {
+    callSafely(() => { throw new Error() });
+  });
+
+  it('returns array with function result', () => {
+    var [result, error] = callSafely(() => 'value');
+    assert.equal('value', result);
+  });
+
+  it('returns array with error thrown by function', () => {
+    var thrown = new Error();
+    var [result, error] = callSafely(() => {throw thrown});
+    assert.strictEqual(undefined, result);
+    assert.equal(thrown, error);
   });
 });
